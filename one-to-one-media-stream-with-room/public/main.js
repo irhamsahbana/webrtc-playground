@@ -5,7 +5,7 @@ let btnGoRoom = document.getElementById('goRoom');
 let localVideo = document.getElementById('localVideo');
 let remoteVideo = document.getElementById('remoteVideo');
 
-let roomNumber, localStream, remoteStream, rtcPeerConnection, isCaller;
+let roomNumber, localStream, remoteStream, rtcPeerConnection, isCaller = false;
 
 const iceServers = {
     'iceServers': [
@@ -15,7 +15,7 @@ const iceServers = {
 };
 
 const streamConstraints = {
-    audio: false,
+    audio: true,
     video: true
 };
 
@@ -32,7 +32,7 @@ btnGoRoom.onclick = () => {
     }
 };
 
-socket.on('created', room => {
+socket.on('created', async (room) => {
     navigator.mediaDevices.getUserMedia(streamConstraints)
         .then(stream => {
             localStream = stream;
@@ -40,7 +40,7 @@ socket.on('created', room => {
             isCaller = true;
         })
         .catch(error => {
-            console.log(error);
+            console.log('error when getUserMedia in created', error);
         });
 });
 
@@ -52,7 +52,7 @@ socket.on('joined', room => {
             socket.emit('ready', roomNumber);
         })
         .catch(error => {
-            console.log(error);
+            console.log('error when getUserMedia in joined', error);
         });
 });
 
@@ -62,8 +62,9 @@ socket.on('ready', () => {
         rtcPeerConnection = new RTCPeerConnection(iceServers);
         rtcPeerConnection.onicecandidate = onIceCandidate;
         rtcPeerConnection.ontrack = onAddStream;
-        rtcPeerConnection.addTrack(localStream.getTracks()[0], localStream);
-        rtcPeerConnection.addTrack(localStream.getTracks()[1], localStream);
+
+        localStream.getTracks().forEach(track => rtcPeerConnection.addTrack(track, localStream));
+
         rtcPeerConnection.createOffer()
             .then(sessionDescription => {
                 rtcPeerConnection.setLocalDescription(sessionDescription);
@@ -72,9 +73,11 @@ socket.on('ready', () => {
                     sdp: sessionDescription,
                     room: roomNumber
                 });
+
+                console.log('sending offer', sessionDescription);
             })
             .catch(error => {
-                console.log(error);
+                console.log('error when createOffer', error);
             });
     }
 });
@@ -84,8 +87,10 @@ socket.on('offer', event => {
         rtcPeerConnection = new RTCPeerConnection(iceServers);
         rtcPeerConnection.onicecandidate = onIceCandidate;
         rtcPeerConnection.ontrack = onAddStream;
-        rtcPeerConnection.addTrack(localStream.getTracks()[0], localStream);
-        rtcPeerConnection.addTrack(localStream.getTracks()[1], localStream);
+        if (typeof localStream === 'undefined') return
+        localStream.getTracks().forEach(track => rtcPeerConnection.addTrack(track, localStream));
+
+        console.log('received offer', event);
         rtcPeerConnection.setRemoteDescription(new RTCSessionDescription(event));
         rtcPeerConnection.createAnswer()
             .then(sessionDescription => {
@@ -95,15 +100,18 @@ socket.on('offer', event => {
                     sdp: sessionDescription,
                     room: roomNumber
                 });
+
+                console.log('sending answer', sessionDescription);
             })
             .catch(error => {
-                console.log(error);
+                console.log('error when createAnswer', error);
             });
     }
 });
 
 socket.on('answer', event => {
     rtcPeerConnection.setRemoteDescription(new RTCSessionDescription(event));
+    console.log('received answer', event);
 });
 
 socket.on('candidate', event => {
@@ -112,10 +120,13 @@ socket.on('candidate', event => {
         candidate: event.candidate
     });
     rtcPeerConnection.addIceCandidate(candidate);
+
+    console.log('received ice candidate', event);
 });
 
 socket.on('full', () => {
     alert('room already full!')
+    window.location.reload();
 });
 
 function onIceCandidate(event) {

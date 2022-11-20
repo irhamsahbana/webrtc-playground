@@ -4,7 +4,7 @@ const http = require('http').Server(app);
 const io = require('socket.io')(http);
 
 const protocol = process.env.PROTOCOL || 'http';
-const domain = process.env.DOMAIN || 'localhost';
+const domain = process.env.DOMAIN ||'localhost';
 const port = process.env.PORT || 3001;
 
 app.use(express.static('public'));
@@ -14,12 +14,15 @@ http.listen(port, () => {
 })
 
 io.on('connection', (socket) => {
-    console.log('a user connected');
+    console.log(`a user with id ${socket.id} connected`);
 
     socket.on('create or join', room => {
-        // console.log('Received request to create or join room ', room);
-        const myRoom = io.sockets.adapter.rooms.get(room)|| { size: 0 };
-        // console.log('current room: ', myRoom);
+        /*
+            will get Set data structure or undefined
+            so we need to handle if it's undefined
+            by creating an empty Set
+        */
+        const myRoom = io.sockets.adapter.rooms.get(room)|| new Set();
         const numClients = myRoom.size;
 
         if (numClients === 0) {
@@ -27,14 +30,14 @@ io.on('connection', (socket) => {
             socket.emit('created', room, socket.id);
             console.log('================== creating room ========================');
             console.log(`Client ID ${socket.id} created room ${room}`);
-            console.log(`Created: Room ${room} now has ${io.sockets.adapter.rooms.get(room).size} client(s)`, io.sockets.adapter.rooms.get(room));
+            console.log(`Created: Room ${room} now has ${io.sockets.adapter.rooms.get(room).size} client(s) :`, io.sockets.adapter.rooms.get(room));
         } else if (numClients === 1) {
             socket.join(room);
             socket.emit('joined', room, socket.id);
             io.sockets.in(room).emit('ready');
             console.log('================== joining room ========================');
             console.log(`Client ID ${socket.id} joined room ${room}`);
-            console.log(`joined: Room ${room} now has ${io.sockets.adapter.rooms.get(room).size} client(s) :`, io.sockets.adapter.rooms.get(room));
+            console.log(`Joined: Room ${room} now has ${io.sockets.adapter.rooms.get(room).size} client(s) :`, io.sockets.adapter.rooms.get(room));
         } else {
             socket.emit('full', room);
         }
@@ -61,7 +64,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log(`Client ID ${socket.id} disconnected`);
         console.log('================== leaving room ========================');
+        console.log(`Client ID ${socket.id} disconnected`);
     });
 })
